@@ -1,0 +1,3 @@
+#!/bin/bash
+
+docker exec spawning-pool env
