@@ -1,37 +1,19 @@
+FROM ubuntu:16.04
 
-FROM golang
+RUN apt-get update && \
+    apt-get upgrade -y && \
+    apt-get install -y ca-certificates openssh-server wget postfix
 
-RUN apt-get update -y &&\
-	apt-get upgrade -y &&\
-	apt-get install git gcc wget -y &&\
-	apt-get install libpam0g-dev -y
+RUN wget https://packages.gitlab.com/install/repositories/gitlab/gitlab-ce/script.deb.sh && chmod 777 script.deb.sh && ./script.deb.sh && apt-get install -y gitlab-ce
 
-EXPOSE 3000
+RUN apt update && apt install -y tzdata && \
+  apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-RUN adduser --disabled-login --gecos 'Gogs' git
-USER git
+RUN echo "unicorn['worker_timeout'] = 100" >> etc/gitlab/gitlab.rc
+RUN echo "unicorn['worker_processes'] = 3" >> etc/gitlab/gitlab.rb
+RUN echo "prometheus_monitoring['enable'] = false" >> /etc/gitlab/gitlab.rb
+RUN echo "grafana['enable'] = false" >> /etc/gitlab/gitlab.rb
 
-WORKDIR /home/git
-RUN mkdir -p local
+EXPOSE 443 80 22
 
-RUN wget https://storage.googleapis.com/golang/go1.10.linux-amd64.tar.gz &&\
-	tar -C /home/git/local -xzf go1.10.linux-amd64.tar.gz
-
-ENV GOROOT=/home/git/local/go
-ENV GOPATH=/home/git/go
-ENV PATH=$PATH:$GOROOT/bin:$GOPATH/bin
-
-RUN mkdir -p $GOPATH/src/github.com/gogits &&\
-	cd $GOPATH/src/github.com/gogits &&\
-	git clone --depth=1 -b develop https://github.com/gogits/gogs &&\
-	cd gogs &&\
-	go build
-
-WORKDIR $GOPATH/src/github.com/gogits/gogs
-RUN go get -u -tags "sqlite pam cert" github.com/gogits/gogs &&\
-	go build -tags "sqlite pam cert"
-
-USER root
-
-WORKDIR $GOPATH/src/github.com/gogits/gogs
-ENTRYPOINT ["./gogs", "web"]
+ENTRYPOINT (/opt/gitlab/embedded/bin/runsvdir-start &) && gitlab-ctl reconfigure && tail -f /dev/null
